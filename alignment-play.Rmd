@@ -1,0 +1,124 @@
+---
+title: "Alignment Play!"
+output: 
+  html_notebook:
+    toc: true
+---
+
+
+# Introduction
+
+I have put a teeny little "genome", which is basically 60 Kb of non-repetitive and non-missing
+DNA from Chinook salmon
+and put it into the file `genome/tiny.fna`. It is a fasta file.  I have some code below
+that prepares that "genome" (indexes it) so that you can align sequences against it
+with `bwa mem`.  I then have written some R functions to automate the process of
+taking two sequences (interpreted as paired-end reads) and mapping them to our tiny genome
+and then printing the relevant lines from the SAM file for your perusal.
+
+We build up these tools so that you can quickly just make up any two sequences you
+want to map them to the genome.  Then we are going to ask you to create all sorts of
+different sequences to obtain particular results (mapping posiitons, flags, CIGAR strings, etc.).
+So, get ready!
+
+# Indexing the genome, and slurping it up
+
+For fun, look at the first 10 lines of the fasta file.
+```{bash}
+head genome/tiny.fna
+```
+This "genome" only has one scaffold in it.  This is atypical.  Most genomes are in many
+different pieces.
+Before we can map sequences against this silly, fake, tiny single-scaffold genome with `bwa`
+we must _index_ it with `bwa`.  That is super easy:
+```{sh}
+bwa index genome/tiny.fna
+```
+
+## Now, store the sequence in a string
+
+In order to grab little pieces from known parts of that genome,
+will will put it into an R object as a string:
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+gen_seq <- read_lines("genome/tiny.fna")[-1] %>%
+  paste(collapse = "")
+```
+
+Now, if you want to get a 100 bp segment from (base-1 indexed) positions 2001 to 2100,
+and another from 2401 to 2500,
+you can do it like this:
+```{r}
+R1 <- str_sub(gen_seq, 2001, 2100)
+R2 <- str_sub(gen_seq, 2401, 2500)
+```
+
+# A function to get SAM output from mapping pairs of sequences
+
+Here we just write a function that takes as input two sequences, say R1 and R2, and then
+writes them into two fastq files and maps them as paired reads using `bwa mem`, and then
+spits out the resulting SAM file to stdout.
+```{r}
+#' map two reads with bwa mem and print the alignment lines
+#' @param R1 sequence of read 1 of the pair
+#' @param R2 sequence of read 2 of the pair.
+map_two_reads <- function(R1, R2) {
+  
+  # make a "workspace" directory to do this in and ensure that it is clean
+  dir.create("workspace", showWarnings = FALSE)
+  dump <- file.remove(dir("workspace/", full.names = TRUE))
+  
+  # create two fastq files with the sequences in there.
+  # given them super high quality scores
+  # here is the first seq
+  cat("@FAKESEQ/1", 
+      R1, 
+      "+", 
+      paste(rep("J", nchar(R1)), collapse = ""), 
+      sep = "\n", 
+      file = "workspace/seq_R1.fq")
+  
+  # and here is the second
+  cat("@FAKESEQ/2", 
+      R2, 
+      "+", 
+      paste(rep("J", nchar(R2)), collapse = ""), 
+      sep = "\n", 
+      file = "workspace/seq_R2.fq")
+  
+  # now map them with bwa mem and print the resulting SAM without the header
+  system("cd workspace; bwa mem ../genome/tiny.fna seq_R1.fq seq_R2.fq 2> bwa.stderr")
+}
+```
+
+Let's demonstrate its use.  Note that the output here is going to get wrapped in the output text box,
+but that is OK. It is easy to see the different columns and the different lines:
+```{r}
+map_two_reads(R1, R2)
+```
+
+OK! That is quick and easy, and let's us play around with modifying sequences to let use see the
+results on the mapping.
+
+Before going on, let's just point out that if you want to know what the SAM flags mean, one
+of the simplest ways of figuring that out is to use the Broad Institute's interactive
+web site at
+[https://broadinstitute.github.io/picard/explain-flags.html](https://broadinstitute.github.io/picard/explain-flags.html).
+
+# One more convenient function
+
+Pass this function a DNA string and it will return its reverse complement:
+```{r}
+revcomp <- function(R) {
+  cmp <- c(A = "T", C = "G", G = "C", T = "A")  # vector of bases named as their complements
+  paste(rev(cmp[strsplit(R, "")[[1]]]), collapse = "")
+}
+```
+
+Now, we can see what the alignment looks like if the template had been the
+complementary strand:
+```{r}
+map_two_reads(revcomp(R1), revcomp(R2))
+```
+
+Note that the only thing that has changed are the SAM flags.
