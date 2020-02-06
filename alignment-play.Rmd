@@ -5,8 +5,10 @@ output:
     toc: true
 ---
 
+** NOTE:  THIS WILL ONLY WORK ON A MAC WITH A REASONABLY RECENT OPERATING SYSTEM **
 
 # Introduction
+
 
 I have put a teeny little "genome", which is basically 60 Kb of non-repetitive and non-missing
 DNA from Chinook salmon
