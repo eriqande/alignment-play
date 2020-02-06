@@ -95,7 +95,7 @@ map_two_reads <- function(R1, R2) {
       file = "workspace/seq_R2.fq")
                 
   # now map them with bwa mem and print the resulting SAM without the header
-  system("cd workspace; ./bin/bwa mem ../genome/tiny.fna seq_R1.fq seq_R2.fq 2> bwa.stderr | tee bwa.output")
+  system("cd workspace; ../bin/bwa mem ../genome/tiny.fna seq_R1.fq seq_R2.fq 2> bwa.stderr | tee bwa.output")
 }
 ```
 
