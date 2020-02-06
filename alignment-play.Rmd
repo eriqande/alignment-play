@@ -36,7 +36,7 @@ different pieces.
 Before we can map sequences against this silly, fake, tiny single-scaffold, genome with _bwa_
 we must _index_ it with _bwa_.  That is super easy:
 ```{sh}
-bwa index genome/tiny.fna
+./bin/bwa index genome/tiny.fna
 ```
 
 ## Now, store the sequence in a string to be able to excerpt parts of it
@@ -95,7 +95,7 @@ map_two_reads <- function(R1, R2) {
       file = "workspace/seq_R2.fq")
                 
   # now map them with bwa mem and print the resulting SAM without the header
-  system("cd workspace; bwa mem ../genome/tiny.fna seq_R1.fq seq_R2.fq 2> bwa.stderr | tee bwa.output")
+  system("cd workspace; ./bin/bwa mem ../genome/tiny.fna seq_R1.fq seq_R2.fq 2> bwa.stderr | tee bwa.output")
 }
 ```
 
