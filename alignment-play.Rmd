@@ -62,7 +62,7 @@ spits out the resulting SAM file to stdout.
 #' map two reads with bwa mem and print the alignment lines
 #' @param R1 sequence of read 1 of the pair
 #' @param R2 sequence of read 2 of the pair.
-map_two_reads <- function(R1, R2) {
+map_two_reads <- function(R1, R2, ref = "../genome/tiny.fna") {
   
   # make a "workspace" directory to do this in and ensure that it is clean
   dir.create("workspace", showWarnings = FALSE)
@@ -74,7 +74,7 @@ map_two_reads <- function(R1, R2) {
   cat("@FAKESEQ/1", 
       R1, 
       "+", 
-      paste(rep("J", nchar(R1)), collapse = ""), 
+      paste(rep(c("A", "B", "C", "D", "E", "F", "G", "H", "I", "J"), length.out = nchar(R1)), collapse = ""), 
       sep = "\n", 
       file = "workspace/seq_R1.fq")
   
@@ -82,10 +82,10 @@ map_two_reads <- function(R1, R2) {
   cat("@FAKESEQ/2", 
       R2, 
       "+", 
-      paste(rep("J", nchar(R2)), collapse = ""), 
+      paste(rep(c("A", "B", "C", "D", "E", "F", "G", "H", "I", "J"), length.out = nchar(R2)), collapse = ""),
       sep = "\n", 
       file = "workspace/seq_R2.fq")
-  
+                
   # now map them with bwa mem and print the resulting SAM without the header
   system("cd workspace; bwa mem ../genome/tiny.fna seq_R1.fq seq_R2.fq 2> bwa.stderr")
 }
@@ -109,9 +109,12 @@ web site at
 
 Pass this function a DNA string and it will return its reverse complement:
 ```{r}
-revcomp <- function(R) {
+revcomp <- function(R, not_reverse = FALSE) {
   cmp <- c(A = "T", C = "G", G = "C", T = "A")  # vector of bases named as their complements
-  paste(rev(cmp[strsplit(R, "")[[1]]]), collapse = "")
+  if (!not_reverse)
+    paste(rev(cmp[strsplit(R, "")[[1]]]), collapse = "")
+  else 
+    paste(cmp[strsplit(R, "")[[1]]], collapse = "")
 }
 ```
 
@@ -121,4 +124,42 @@ complementary strand:
 map_two_reads(revcomp(R1), revcomp(R2))
 ```
 
-Note that the only thing that has changed are the SAM flags.
+What things have changed?  What? The sequences are the same but the quality scores
+are in reverse direction?  In other words, the sequences shown are reverse complemented.
+
+Also the SAM flags have changed.
+
+## Different scenarios
+
+Let's play with some different things here.
+
+### Wonky strand direction between mates
+
+If each of those reads are on different strands what does that look like?
+```{r}
+map_two_reads(R1, revcomp(R2))
+```
+
+Each segment maps by itself just fine, but check the SAM flags. They show that R2 maps to the reverse strand.
+
+### Indels  
+
+Let's put the a 6-bp indel `AGAGAG` into read one between positions 10 and 11.
+```{r}
+R1
+```
+
+```{r}
+R1_ind <- str_c(str_sub(R1, 1, 10), "AGAGAG", str_sub(R1, 11))                 
+```
+
+Map that:
+```{r}
+map_two_reads(R1_ind, R2)
+```
+
+What if it is on the other strand?
+```{r}
+map_two_reads(revcomp(R1_ind), R2)
+```
+
