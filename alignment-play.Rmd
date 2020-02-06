@@ -5,39 +5,41 @@ output:
     toc: true
 ---
 
-** NOTE:  THIS WILL ONLY WORK ON A MAC WITH A REASONABLY RECENT OPERATING SYSTEM **
+**NOTE:  THIS WILL ONLY WORK ON A MAC WITH A REASONABLY RECENT OPERATING SYSTEM**  
+It won't run on Windows.  Find a partner in class with a Mac to work with...
 
 # Introduction
 
 
 I have put a teeny little "genome", which is basically 60 Kb of non-repetitive and non-missing
-DNA from Chinook salmon
-and put it into the file `genome/tiny.fna`. It is a fasta file.  I have some code below
+DNA from Chinook salmon,
+into the file `genome/tiny.fna`. It is a FASTA file.  I have some code below
 that prepares that "genome" (indexes it) so that you can align sequences against it
-with `bwa mem`.  I then have written some R functions to automate the process of
-taking two sequences (interpreted as paired-end reads) and mapping them to our tiny genome
+with _bwa mem_.  I then have written some R functions to automate the process of
+taking two sequences (interpreted as paired-end reads), mapping them to our tiny genome,
 and then printing the relevant lines from the SAM file for your perusal.
 
-We build up these tools so that you can quickly just make up any two sequences you
-want to map them to the genome.  Then we are going to ask you to create all sorts of
-different sequences to obtain particular results (mapping posiitons, flags, CIGAR strings, etc.).
-So, get ready!
+We build up these tools so that you can quickly make up any two sequences you
+want, map them to the genome, then observe the results such as mapping posiitons, flags,
+CIGAR strings, etc.
+
+Fun!
 
 # Indexing the genome, and slurping it up
 
-For fun, look at the first 10 lines of the fasta file.
+For fun, look at the first 10 lines of the FASTA file.
 ```{bash}
 head genome/tiny.fna
 ```
 This "genome" only has one scaffold in it.  This is atypical.  Most genomes are in many
 different pieces.
-Before we can map sequences against this silly, fake, tiny single-scaffold genome with `bwa`
-we must _index_ it with `bwa`.  That is super easy:
+Before we can map sequences against this silly, fake, tiny single-scaffold, genome with _bwa_
+we must _index_ it with _bwa_.  That is super easy:
 ```{sh}
 bwa index genome/tiny.fna
 ```
 
-## Now, store the sequence in a string
+## Now, store the sequence in a string to be able to excerpt parts of it
 
 In order to grab little pieces from known parts of that genome,
 will will put it into an R object as a string:
@@ -57,14 +59,18 @@ R2 <- str_sub(gen_seq, 2401, 2500)
 
 # A function to get SAM output from mapping pairs of sequences
 
-Here we just write a function that takes as input two sequences, say R1 and R2, and then
-writes them into two fastq files and maps them as paired reads using `bwa mem`, and then
-spits out the resulting SAM file to stdout.
+Here we just write a function that:
+
+1. takes two sequences, say R1 and R2 as input
+1. writes those sequences into two fastq files
+1. maps them as paired reads using _bwa mem_
+1. spits out the resulting SAM file to stdout (and saves a copy to disk for View()-ing as well)
+
 ```{r}
 #' map two reads with bwa mem and print the alignment lines
 #' @param R1 sequence of read 1 of the pair
 #' @param R2 sequence of read 2 of the pair.
-map_two_reads <- function(R1, R2, ref = "../genome/tiny.fna") {
+map_two_reads <- function(R1, R2) {
   
   # make a "workspace" directory to do this in and ensure that it is clean
   dir.create("workspace", showWarnings = FALSE)
@@ -89,28 +95,18 @@ map_two_reads <- function(R1, R2, ref = "../genome/tiny.fna") {
       file = "workspace/seq_R2.fq")
                 
   # now map them with bwa mem and print the resulting SAM without the header
-  system("cd workspace; bwa mem ../genome/tiny.fna seq_R1.fq seq_R2.fq 2> bwa.stderr")
+  system("cd workspace; bwa mem ../genome/tiny.fna seq_R1.fq seq_R2.fq 2> bwa.stderr | tee bwa.output")
 }
 ```
 
-Let's demonstrate its use.  Note that the output here is going to get wrapped in the output text box,
-but that is OK. It is easy to see the different columns and the different lines:
+We demonstrate the use of `map_two_reads` in a moment, but
+before we do, recall from the lecture that one of the two reads in a read pair must be
+the sequence off of
+the reverse strand of the reference genome.  So to make a properly paired read we will
+need to make one of R1 and R2 above its reverse complement.  Here is a quick function to
+do that:
 ```{r}
-map_two_reads(R1, R2)
-```
-
-OK! That is quick and easy, and let's us play around with modifying sequences to let use see the
-results on the mapping.
-
-Before going on, let's just point out that if you want to know what the SAM flags mean, one
-of the simplest ways of figuring that out is to use the Broad Institute's interactive
-web site at
-[https://broadinstitute.github.io/picard/explain-flags.html](https://broadinstitute.github.io/picard/explain-flags.html).
-
-# One more convenient function
-
-Pass this function a DNA string and it will return its reverse complement:
-```{r}
+# Pass this function a DNA string and it will return its reverse complement:
 revcomp <- function(R, not_reverse = FALSE) {
   cmp <- c(A = "T", C = "G", G = "C", T = "A")  # vector of bases named as their complements
   if (!not_reverse)
@@ -120,16 +116,59 @@ revcomp <- function(R, not_reverse = FALSE) {
 }
 ```
 
-Now, we can see what the alignment looks like if the template had been the
-complementary strand:
+Now we are ready to map two reads.
+Note that the output in the notebook will get wrapped in the output text box,
+but that is OK. It is still reasonably easy to see the different columns and the different lines.
 ```{r}
-map_two_reads(revcomp(R1), revcomp(R2))
+map_two_reads(R1, revcomp(R2))
 ```
 
-What things have changed?  What? The sequences are the same but the quality scores
-are in reverse direction?  In other words, the sequences shown are reverse complemented.
+This shows two header lines (each starting with a `@`) and two alignment lines (one for each read).
 
-Also the SAM flags have changed.
+If you want to view the alignments in tabular format with column names atop the 11
+mandatory fields in a SAM file, here is a function to read the alignments out of
+the last run of `bwa` (it merely read a file called `bwa.output` that is left in the
+`workspace` directory) into a tibble.
+```{r}
+# working directory must be the project directory for this to work
+slurp_last_alignment <- function() {
+  aln <- read_tsv("workspace/bwa.output", col_names = FALSE, comment = "@")
+  names(aln)[1:11] <- c(
+    "QNAME",  # the name of the read (Q for Query)
+    "FLAG",   # decimal value of SAM flag bitmask
+    "RNAME",  # name of scaffold/chromosome the read aligns to
+    "POS",    # position on reference scaffold/chromosome the read aligns to
+    "MAPQ",   # mapping quality score, Phred scaled
+    "CIGAR",  # CIGAR string
+    "RNEXT",  # name of scaffold/chromosome the read's *mate* aligns to
+    "PNEXT",  # position on reference scaffold/chromosome the read's mate aligns to
+    "TLEN",   # inferred length of template from mapping position of read pairs
+    "SEQ",    # the sequence of the read, **reverse complemented, if necessary** to match the forward strand
+    "QUAL"    # read base quality scores (re-ordered if SEQ is reverse complemented)
+  )
+  aln
+  
+}
+```
+We use that like this:
+```{r, message=FALSE}
+slurp_last_alignment()
+```
+
+And, if you want to see it in the RStudio viewer window you could do:
+```
+slurp_last_alignment() %>% View()
+```
+
+OK! That is quick and easy.  Now we can play around with modifying sequences to let us see the
+results on the mapping.
+
+
+In that endeavor, let's just point out that if you want to know what the SAM flags mean, one
+of the simplest ways of figuring that out is to use the Broad Institute's interactive
+web site at
+[https://broadinstitute.github.io/picard/explain-flags.html](https://broadinstitute.github.io/picard/explain-flags.html).
+
 
 ## Different scenarios
 
@@ -139,10 +178,11 @@ Let's play with some different things here.
 
 If each of those reads are on different strands what does that look like?
 ```{r}
-map_two_reads(R1, revcomp(R2))
+map_two_reads(R1, R2)
 ```
 
-Each segment maps by itself just fine, but check the SAM flags. They show that R2 maps to the reverse strand.
+Each segment maps by itself just fine, but check the SAM flags to see that they both
+map to the forward strand.
 
 ### Indels  
 
@@ -157,7 +197,7 @@ R1_ind <- str_c(str_sub(R1, 1, 10), "AGAGAG", str_sub(R1, 11))
 
 Map that:
 ```{r}
-map_two_reads(R1_ind, R2)
+map_two_reads(R1_ind, revcomp(R2))
 ```
 
 What if it is on the other strand?
