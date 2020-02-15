@@ -3,7 +3,6 @@ title: "Alignment Play!"
 output: 
   html_notebook:
     toc: true
-    toc_float: true
 ---
 
 **NOTE:  THIS WILL ONLY WORK ON A MAC WITH A REASONABLY RECENT OPERATING SYSTEM**  
